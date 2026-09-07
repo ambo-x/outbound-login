@@ -9,214 +9,56 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/tailwind.css">
-  <script
-    async
-    crossorigin="anonymous"
-    data-clerk-publishable-key="pk_live_Y2xlcmsub3V0Ym91bmQuZmFqcnJyLmNvbSQ"
-    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
-    type="text/javascript"
-  ></script>
-  <style>body { font-family: 'Inter', sans-serif; }</style>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .field { width: 100%; box-sizing: border-box; padding: 0.625rem 0.875rem; font-size: 0.875rem;
+      color: #18181b; background: #fff; border: 1px solid #e4e4e7; border-radius: 0.5rem; outline: none; }
+    .field::placeholder { color: #a1a1aa; }
+    .field:focus { border-color: #a1a1aa; box-shadow: 0 0 0 3px rgba(161,161,170,0.15); }
+    .field-label { display: block; font-size: 0.75rem; font-weight: 500; color: #52525b; margin-bottom: 0.375rem; }
+    .btn { width: 100%; padding: 0.625rem 0.875rem; font-size: 0.875rem; font-weight: 600; color: #fff;
+      background: #18181b; border: none; border-radius: 0.5rem; cursor: pointer; }
+    .btn:hover { background: #27272a; }
+  </style>
 </head>
 <body class="min-h-screen flex items-center justify-center bg-white">
   <div class="w-full max-w-md px-4">
     <div class="text-center mb-8">
       <img src="/logo.png" alt="Outbound Fajrrr" class="h-14 mx-auto mb-1">
-      <p id="subtitle" class="text-zinc-400 text-xs">Sign in to continue</p>
+      <p class="text-zinc-400 text-xs">Sign in to continue</p>
     </div>
 
-    <!-- Loading state -->
-    <div id="loading" class="text-center py-8">
-      <p class="text-zinc-400 text-sm">Loading...</p>
+    <!-- Error banner (hidden until submit) -->
+    <div id="error-banner" role="alert"
+      class="hidden mb-4 px-4 py-2.5 rounded-lg text-sm bg-red-50 text-red-600 border border-red-200">
+      Incorrect username or password. Please try again.
     </div>
 
-    <!-- Auth container (sign-in / sign-up / org creation) -->
-    <div id="clerk-auth" style="display:none;"></div>
+    <form id="login-form" autocomplete="off" novalidate>
+      <div class="mb-4">
+        <label class="field-label" for="username">Username</label>
+        <input class="field" id="username" name="username" type="text" placeholder="you@example.com" autocomplete="off">
+      </div>
+      <div class="mb-6">
+        <label class="field-label" for="password">Password</label>
+        <input class="field" id="password" name="password" type="password" placeholder="••••••••" autocomplete="off">
+      </div>
+      <button class="btn" type="submit">Sign in</button>
+    </form>
   </div>
 
-  <script src="/js/shared.js"></script>
   <script>
-    var authEl = document.getElementById('clerk-auth');
-    var loadingEl = document.getElementById('loading');
-    var subtitleEl = document.getElementById('subtitle');
-
-    function showAuth() {
-      loadingEl.style.display = 'none';
-      authEl.style.display = 'block';
-    }
-
-    function showLoading(msg) {
-      loadingEl.querySelector('p').textContent = msg || 'Loading...';
-      loadingEl.style.display = 'block';
-      authEl.style.display = 'none';
-    }
-
-    function mountSignIn() {
-      authEl.innerHTML = '';
-      subtitleEl.textContent = 'Sign in to continue';
-      window.Clerk.mountSignIn(authEl, {
-        // Keep the current query (incl. ?next=) so a post-auth navigation back
-        // to this page doesn't lose the intended destination.
-        fallbackRedirectUrl: '/login' + window.location.search,
-        signUpUrl: '/login?mode=signup',
-        routing: 'virtual',
-      });
-      showAuth();
-    }
-
-    function mountSignUp() {
-      authEl.innerHTML = '';
-      subtitleEl.textContent = 'Create your account';
-      window.Clerk.mountSignUp(authEl, {
-        fallbackRedirectUrl: '/login' + window.location.search,
-        signInUrl: '/login?mode=signin',
-        routing: 'virtual',
-      });
-      showAuth();
-    }
-
-    function mountCreateOrg() {
-      authEl.innerHTML = '';
-      subtitleEl.textContent = 'Create your organization';
-      window.Clerk.mountCreateOrganization(authEl, {
-        afterCreateOrganizationUrl: '/login',
-      });
-      showAuth();
-    }
-
-    function mountOrgPicker(memberships) {
-      authEl.innerHTML = '';
-      subtitleEl.textContent = 'Choose your workspace';
-      var html = '<div class="space-y-2">';
-      memberships.forEach(function(m) {
-        var org = m.organization;
-        html += '<button onclick="selectOrg(\'' + esc(org.id) + '\')" class="w-full text-left border border-zinc-200 rounded-lg px-4 py-3 hover:border-zinc-400 hover:bg-zinc-50 transition-colors cursor-pointer">' +
-          '<span class="text-sm font-medium text-zinc-900 block">' + esc(org.name) + '</span>' +
-          '<span class="text-xs text-zinc-400">' + esc(org.slug) + '</span>' +
-        '</button>';
-      });
-      html += '</div>';
-      authEl.innerHTML = html;
-      showAuth();
-    }
-
-    /**
-     * Post-login destination. Honors ?next= (set by fetchWithAuth on a hard
-     * 401) but only for same-origin paths: must start with a single '/' and
-     * not '//' or '/\' — browsers treat those as protocol-relative, which
-     * would make this an open redirect. Anything else → dashboard.
-     */
-    function getNextPath() {
-      var next = new URLSearchParams(window.location.search).get('next');
-      if (next && /^\/(?![/\\])/.test(next)) return next;
-      return '/dashboard';
-    }
-
-    async function selectOrg(orgId) {
-      showLoading('Activating workspace...');
-      try {
-        await window.Clerk.setActive({ organization: orgId });
-        window.location.href = getNextPath();
-      } catch (e) {
-        subtitleEl.textContent = 'Error activating workspace';
-        showLoading('Could not activate organization: ' + e.message + '. Please refresh the page.');
-      }
-    }
-
-    /**
-     * Choose org based on membership count. Always fetches memberships
-     * (ignores any org Clerk may have auto-restored).
-     */
-    async function chooseOrgAndRedirect() {
-      showLoading('Setting up your workspace...');
-
-      var memberships = null;
-      try {
-        memberships = await window.Clerk.user.getOrganizationMemberships();
-      } catch (e) {
-        subtitleEl.textContent = 'Error loading your workspace';
-        showLoading('Could not fetch organizations: ' + e.message + '. Please refresh the page.');
-        return;
-      }
-
-      var orgs = (memberships && memberships.data) || [];
-
-      if (orgs.length === 1) {
-        // Loop-breaker: if the app keeps hard-401ing us back here (broken org
-        // claim, role mismatch — server-side problems), auto-activating again
-        // would ping-pong forever. Stop and tell the user instead.
-        if (isAuthBounceLooping()) {
-          clearAuthBounce();
-          subtitleEl.textContent = 'Sign-in problem';
-          showLoading('Signed in, but the app keeps rejecting your session for "' +
-            orgs[0].organization.name + '". This usually means an organization setup issue — contact your admin, or try signing out and back in.');
-          return;
-        }
-        try {
-          await window.Clerk.setActive({ organization: orgs[0].organization.id });
-          window.location.href = getNextPath();
-        } catch (e) {
-          subtitleEl.textContent = 'Error activating workspace';
-          showLoading('Could not activate organization: ' + e.message + '. Please refresh the page.');
-        }
-        return;
-      }
-
-      if (orgs.length > 1) {
-        mountOrgPicker(orgs);
-        return;
-      }
-
-      mountCreateOrg();
-    }
-
-    var isRedirecting = false;
-
-    function bootLogin() {
-      if (!window.Clerk) {
-        setTimeout(bootLogin, 100);
-        return;
-      }
-      window.Clerk.load().then(async function() {
-        if (window.Clerk.user) {
-          // User is signed in — try to activate org and go to dashboard
-          await chooseOrgAndRedirect();
-          return;
-        }
-
-        // Listen for auth state changes (Clerk virtual navigation after sign-in)
-        window.Clerk.addListener(function(resources) {
-          if (resources.user && !isRedirecting) {
-            isRedirecting = true;
-            chooseOrgAndRedirect();
-          }
-        });
-
-        // Not signed in — show appropriate form
-        var params = new URLSearchParams(window.location.search);
-        var hash = window.location.hash;
-        if (params.get('mode') === 'signup' || hash === '#signup') {
-          mountSignUp();
-        } else {
-          mountSignIn();
-        }
-      });
-    }
-
-    // Listen for hash changes (Clerk's built-in sign-up/sign-in links)
-    window.addEventListener('hashchange', function() {
-      if (!window.Clerk || !window.Clerk.loaded) return;
-      if (window.Clerk.user) return; // Already signed in, don't remount
-
-      var hash = window.location.hash;
-      if (hash === '#signup') {
-        mountSignUp();
-      } else if (hash === '#signin') {
-        mountSignIn();
-      }
+    // Static placeholder login. The Outbound Fajrrr app is offline, so this form
+    // does NOT authenticate and does NOT transmit or store what is typed — on
+    // submit it simply shows an error. No network request is made with the
+    // entered credentials.
+    var form = document.getElementById('login-form');
+    var banner = document.getElementById('error-banner');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      banner.classList.remove('hidden');
+      document.getElementById('password').value = '';
     });
-
-    window.addEventListener('load', bootLogin);
   </script>
 </body>
 </html>
